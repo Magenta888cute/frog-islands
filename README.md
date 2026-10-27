@@ -2,7 +2,7 @@
 
 A 3D frog-collecting game designed by Sasha.
 
-**Play it here: https://chen168.github.io/frog-islands/**
+**Play it here: https://magenta888cute.github.io/frog-islands/**
 
 You wake up on a floating island above the clouds with a frog egg in your bag. Put it in the lake: in 30 island
 days (one day is 30 seconds, and eggs keep growing while the game is closed) it hatches into a tadpole, grows legs
