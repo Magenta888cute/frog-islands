@@ -641,11 +641,19 @@ const LAKE_DEPTH = 1.3;     // how deep the lake bowl goes
    New fields added in future updates get their defaults automatically (mergeDefaults),
    so old saves keep working after every update. */
 
-const GAME_VERSION = 1;
+const GAME_VERSION = 2;
 const SAVE_KEY = 'frogIslands.save';
 
 // In-game "What's new" list. For every update: bump GAME_VERSION and add an entry on top.
 const UPDATE_LOG = [
+  {
+    v: 2, date: 'October 2026', title: 'Two bug fixes from Sasha',
+    items: [
+      '🔁 Start over really starts over now. Before, the old islands sneaked back in while the game restarted',
+      '💧 The waterfall on Waterfall Island is lined up: the stream, the foam and the falling water all meet at the edge, and it pours straight instead of leaning sideways',
+      '📱 If an iPad or iPhone throws the picture away while the game sat in the background, the game saves and starts itself again instead of standing perfectly still',
+    ],
+  },
   {
     v: 1, date: 'October 2026', title: 'Frog Islands is here!',
     items: [
@@ -714,6 +722,7 @@ const Save = {
   },
   exists() { try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; } },
   write() {
+    if (this.resetting || window.SAVE_LOCK) return; // Start over in progress: never write the old island back
     S.time.last = Date.now();
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { console.warn('save write', e); }
     this.dirty = false; this.lastWrite = performance.now();
@@ -724,7 +733,7 @@ const Save = {
     this.t += dt;
     if ((this.dirty && this.t > 2) || this.t > 10) { this.t = 0; this.write(); }
   },
-  reset() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } },
+  reset() { this.resetting = true; try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } },
 };
 window.addEventListener('pagehide', () => { if (S) Save.write(); });
 document.addEventListener('visibilitychange', () => { if (S && document.visibilityState === 'hidden') Save.write(); });
@@ -1506,8 +1515,8 @@ function lakeDepthAt(def, lx, lz) {
 // where the giant island's stream runs (island-local), computed once from its big lake
 function islandChannel(def) {
   if (def.channel || !def.giant) return def.channel;
-  const L = def.lakes[0], a = 2.4;
-  def.channel = { ax: L.x + Math.cos(a) * (L.r - 1.2), az: L.z + Math.sin(a) * (L.r - 1.2), bx: Math.cos(a) * (def.r + 0.3), bz: Math.sin(a) * (def.r + 0.3), angle: a };
+  const L = def.lakes[0], a = 2.4, rr = rimRadius(def, a); // rr: where the bumpy edge really is in that direction
+  def.channel = { ax: L.x + Math.cos(a) * (L.r - 1.2), az: L.z + Math.sin(a) * (L.r - 1.2), bx: Math.cos(a) * (rr + 0.3), bz: Math.sin(a) * (rr + 0.3), angle: a, rim: rr };
   return def.channel;
 }
 
@@ -1521,6 +1530,9 @@ const World = {
   init(canvas) {
     const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // iPads and iPhones can throw the drawing context away after the game sat in the background. Instead of a
+    // frozen picture, save and start the page again (the save keeps everything).
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); try { Save.write(); } catch (err) { /* ignore */ } setTimeout(() => location.reload(), 400); });
     r.outputEncoding = THREE.sRGBEncoding;
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(this.fogColor, 110, 300);
@@ -1773,7 +1785,7 @@ const World = {
     return m;
   },
   makeWaterfall(isl) {
-    const def = isl.def, ch = islandChannel(def), a = ch.angle;
+    const def = isl.def, ch = islandChannel(def), a = ch.angle, rr = ch.rim;
     // water in the stream groove
     const len = Math.hypot(ch.bx - ch.ax, ch.bz - ch.az);
     const stream = new THREE.Mesh(new THREE.PlaneGeometry(2.4, len + 1).rotateX(-Math.PI / 2), toon('#5fc0ff', { transparent: true, opacity: 0.85 }));
@@ -1786,12 +1798,14 @@ const World = {
     g.fillStyle = 'rgba(80,160,255,0.35)'; for (let i = 0; i < 6; i++) g.fillRect((i * 37 + 10) % 64, 0, 3, 256);
     const tex = canvasTex(c, 1, 3); tex.wrapT = THREE.RepeatWrapping;
     const fall = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 30), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
-    fall.position.set(Math.cos(a) * (def.r + 1.0), -14.6, Math.sin(a) * (def.r + 1.0)); fall.rotation.y = -a + Math.PI / 2; fall.rotation.x = 0.08; fall.renderOrder = 3; isl.group.add(fall);
+    // hangs from the lip at the real edge; 'YXZ' makes the small lean happen around the sheet's own top edge
+    // (around the world's X axis it skewed the sheet sideways), so the water pours straight down and a little outward
+    fall.position.set(Math.cos(a) * (rr + 1.1), -15.1, Math.sin(a) * (rr + 1.1)); fall.rotation.order = 'YXZ'; fall.rotation.y = -a + Math.PI / 2; fall.rotation.x = -0.08; fall.renderOrder = 3; isl.group.add(fall);
     // foam at the top edge and a little lip of water
-    for (let i = 0; i < 7; i++) { const f = sph(0.3 + (i % 3) * 0.1, '#ffffff', 8, 6); const side = (i - 3) * 0.42; f.position.set(Math.cos(a) * (def.r + 0.4) - Math.sin(a) * side, -0.2 + (i % 2) * 0.12, Math.sin(a) * (def.r + 0.4) + Math.cos(a) * side); f.scale.y = 0.6; isl.group.add(f); }
+    for (let i = 0; i < 7; i++) { const f = sph(0.3 + (i % 3) * 0.1, '#ffffff', 8, 6); const side = (i - 3) * 0.42; f.position.set(Math.cos(a) * (rr + 0.4) - Math.sin(a) * side, -0.2 + (i % 2) * 0.12, Math.sin(a) * (rr + 0.4) + Math.cos(a) * side); f.scale.y = 0.6; isl.group.add(f); }
     isl.waterfall = { x: def.x + ch.bx, z: def.z + ch.bz, lx: ch.bx, lz: ch.bz, angle: a, fall, tex };
     isl.clear.push({ x: ch.bx, z: ch.bz, r: 3 }, { x: (ch.ax + ch.bx) / 2, z: (ch.az + ch.bz) / 2, r: 2.5 }, { x: ch.ax, z: ch.az, r: 2 });
-    isl.mist = { x: def.x + Math.cos(a) * (def.r + 1.0), z: def.z + Math.sin(a) * (def.r + 1.0), t: 0 };
+    isl.mist = { x: def.x + Math.cos(a) * (rr + 1.2), z: def.z + Math.sin(a) * (rr + 1.2), t: 0 };
   },
 
   /* ---------- bridges ---------- */
