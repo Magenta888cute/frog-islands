@@ -13,7 +13,8 @@ on every island, name and feed your frogs, listen to them sing at night, and dec
 
 Make a wish at the Wishing Well to give your frogs magical looks or hatch one of the 10 Mystic Frogs, dress up the Frog
 Keeper, build and decorate a house, pick wildflowers, take photos with your frogs, and carry your save to another device
-with *Settings → Move my save*.
+with *Settings → Move my save*. Collect gems to crack open the cave wall into the Cave Garden, make baby eggs at the Frog
+Nursery, and join the Dream Event every third day.
 
 Works on iPad, iPhone and computers. On iPad or iPhone, tap Share → *Add to Home Screen* to play it like an app.
 
